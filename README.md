@@ -60,6 +60,156 @@ OBS.: os detalhes de quais atributos cada tipo vai precisar vamos definir mais t
 
 # Tarefas
 
-1. Entender os requisitos do sistema.
-2. Desenhar uma arquitetura para esse sistema.
-3. Criar a estrutura inicial (pastas para backend considenrando boas praticas pythonicas e pastas para frontend considerando boas praticas de vue.js).
+1. Documentar o modelo de dados inicial no Firestore (coleções, atributos obrigatórios, enums de tipos) e alinhar contratos de API.
+2. Implementar a camada de repositórios integrada ao Firestore Emulator, com testes cobrindo operações básicas e tratamento de erros.
+2.1 A integracao com o banco de dados deve ficar desacoplada do codigo principal, de forma que possamos facilmente trocar o client se necessario. Ou seja, uma interface para manter o codigo sem saber que por baixo dos panos tem Firestore.
+3. Desenvolver serviços e rotas reais para `passivos`, `renda_variavel` e `renda_fixa`, incluindo filtros e respostas estruturadas.
+4. Conectar o frontend ao backend via `apiClient` + Pinia, renderizando listas e estados de carregamento/erro nas views principais.
+5. Configurar pipelines de qualidade (lint, `pytest`, `npm run test:unit`) e preparar um esqueleto de CI/CD para builds e deploy.
+
+## Modelo de dados (Firestore)
+
+- `passivos`
+  - **id** (string, gerado pelo Firestore)
+  - **nome** (string, obrigatório)
+  - **categoria** (string, enum: `financiamento`, `emprestimo`, `cartao`, `outros`)
+  - **saldo_atual** (number, obrigatório)
+  - **taxa_juros_aa** (number, opcional, % anual)
+  - **vencimento** (timestamp, opcional)
+  - **observacoes** (string, opcional)
+- `renda_variavel_positions`
+  - **id** (string)
+  - **ticker** (string, obrigatório)
+  - **tipo** (string, enum: `fii`, `acao_br`, `stock_us`, `etf`, `reit`, `fundo_investimento`, `outros`)
+  - **quantidade** (number, obrigatório)
+  - **preco_medio** (number, obrigatório)
+  - **cotacao_atual** (number, obrigatório)
+  - **total_compra** (number, calculado)
+  - **total_mercado** (number, calculado)
+  - **resultado_monetario** (number, calculado)
+  - **performance_percentual** (number, calculado)
+  - **peso_percentual** (number, calculado por tipo)
+  - **peso_desejado_percentual** (number, configurável)
+  - **atualizado_em** (timestamp, obrigatório)
+- `renda_variavel_trades`
+  - **id** (string)
+  - **position_id** (string, referência à coleção `renda_variavel_positions`)
+  - **tipo_operacao** (string, enum: `compra`, `venda`)
+  - **data** (timestamp, obrigatório)
+  - **quantidade** (number, obrigatório)
+  - **cotacao** (number, obrigatório)
+  - **total** (number, obrigatório)
+  - **preco_medio_no_ato** (number, obrigatório para vendas)
+  - **resultado_monetario** (number, obrigatório para vendas)
+  - **performance_percentual** (number, obrigatório para vendas)
+- `renda_variavel_proventos`
+  - **id** (string)
+  - **position_id** (string)
+  - **tipo_provento** (string, enum: `dividendo`, `jcp`, `rendimento`, `outros`)
+  - **data** (timestamp, obrigatório)
+  - **valor_monetario** (number, obrigatório)
+  - **moeda** (string, enum: `brl`, `usd`)
+- `renda_fixa_positions`
+  - **id** (string)
+  - **ativo** (string, obrigatório)
+  - **tipo** (string, enum: `cdb`, `lci`, `lca`, `tesouro_prefixado`, `tesouro_ipca`, `tesouro_selic`, `debenture`, `outros`)
+  - **indexador** (string, enum: `pre`, `pos_cdi`, `pos_ipca`, `pos_selic`, `outros`)
+  - **rentabilidade_aa** (number, obrigatório, % a.a.)
+  - **distribuidor** (string, opcional)
+  - **valor** (number, obrigatório)
+  - **data_inicio** (timestamp, obrigatório)
+  - **vencimento** (timestamp, obrigatório)
+  - **moeda** (string, padrão `brl`)
+- Edição direta de passivos: atualizar `saldo_atual` e `vencimento` conforme necessário, sem histórico de movimentações.
+
+## Contratos de API (v1)
+
+- `GET /passivos`
+  - Resposta: `{ "items": Passivo[] }`
+- `POST /passivos`
+  - Request: `PassivoInput`
+  - Resposta: `{ "item": Passivo }`
+- `PUT /passivos/{id}` / `DELETE /passivos/{id}`
+  - Operações de atualização e remoção; respostas `Passivo` ou `{ "status": "deleted" }`.
+- `GET /renda-variavel`
+  - Resposta: `{ "positions": Position[], "insights": InsightsResumo }`
+- `POST /renda-variavel`
+  - Request: `PositionInput`
+  - Resposta: `{ "position": Position }`
+- `POST /renda-variavel/{id}/trades`
+  - Request: `TradeInput`
+  - Resposta: `{ "trade": Trade, "position": PositionAtualizada }`
+- `POST /renda-variavel/{id}/proventos`
+  - Request: `ProventoInput`
+  - Resposta: `{ "provento": Provento }`
+- `GET /renda-fixa`
+  - Resposta: `{ "items": RendaFixaPosition[] }`
+- `POST /renda-fixa`
+  - Request: `RendaFixaInput`
+  - Resposta: `{ "item": RendaFixaPosition }`
+- `DELETE /renda-fixa/{id}`
+  - Resposta: `{ "status": "deleted" }`
+
+Modelos-base para requests/respostas:
+
+```
+type Passivo = {
+  id: string;
+  nome: string;
+  categoria: string;
+  saldoAtual: number;
+  taxaJurosAa?: number;
+  vencimento?: string;
+  observacoes?: string;
+};
+
+type Position = {
+  id: string;
+  ticker: string;
+  tipo: string;
+  quantidade: number;
+  precoMedio: number;
+  cotacaoAtual: number;
+  totalCompra: number;
+  totalMercado: number;
+  resultadoMonetario: number;
+  performancePercentual: number;
+  pesoPercentual: number;
+  pesoDesejadoPercentual: number;
+  atualizadoEm: string;
+};
+
+type TradeInput = {
+  tipoOperacao: "compra" | "venda";
+  data: string;
+  quantidade: number;
+  cotacao: number;
+  precoMedioNoAto?: number;
+  resultadoMonetario?: number;
+  performancePercentual?: number;
+};
+
+type RendaFixaPosition = {
+  id: string;
+  ativo: string;
+  tipo: string;
+  indexador: string;
+  rentabilidadeAa: number;
+  distribuidor?: string;
+  valor: number;
+  dataInicio: string;
+  vencimento: string;
+  moeda: string;
+};
+```
+
+# Regras de negocio
+
+- Para a renda variavel, todos os tipos devem conter isso: Ativo, Quantidade, Preço Médio, Cotação Atual, Total Compra, Total Mercado, Resultado (R$ ou U$ dependendo do caso), Performance %, Peso % (em relacao aos outros ativos do mesmo tipo),	Peso Desejado (em relacao aos outros ativos do mesmo tipo).
+    - Exemplo: Ativo: HSML11, Quantidade: 80, Preco Medio: R$10, Cotacao Atual: R$20, Total Compra: R$800, Total Mercado: R$1600, Resultado: R$800, Performance: 100%, Peso: 100%, Peso Desejado: 25%.
+- Novos registros de compra de qualquer renda variavel devem conter: Data, Ativo, Quantidade, Cotação, Total (R$ ou U$ dependendo do caso).
+- Novos registros de venda de qualquer renda variavel devem conter: Data, Ativo, Quantidade, Preço Médio, Cotação Venda, Total Venda, Resultado (R$ ou U$), Performance %
+- Registro de proventos recebidos (JCP,Rendimento, Dividendos, etc).
+- Possibilidade de Editar ou Excluir registros/ativos.
+- Para registros de renda fixa, usar: Data Início, Ativo, Tipo, Indexador, Rentabilidade a.a.,	Distribuidor, Vencimento, Valor.
+    - Exemplo: 23/02/2023, CDB AGIBANK - FEV/2025, CDB, Prefixado, 14,55%, XP Investimentos, 24/02/2025, R$ 5.000,00
