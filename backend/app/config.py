@@ -13,6 +13,7 @@ class Config:
     firestore_project_id: str | None = None
     firestore_emulator_host: str | None = None
     secret_key: str | None = None
+    cors_origins: str | list[str] | None = None
 
 
 def load_config(env: str | None = None) -> Dict[str, Any]:
@@ -22,6 +23,12 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
     firestore_project_id = os.environ.get("FIRESTORE_PROJECT_ID")
     firestore_emulator_host = os.environ.get("FIRESTORE_EMULATOR_HOST")
     secret_key = os.environ.get("SECRET_KEY")
+    cors_origins_env = os.environ.get("CORS_ORIGINS")
+
+    cors_origins: str | list[str] | None = None
+    if cors_origins_env:
+        parsed = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+        cors_origins = parsed[0] if len(parsed) == 1 else parsed
 
     match env_name:
         case "production":
@@ -29,6 +36,7 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
                 firestore_project_id=firestore_project_id,
                 firestore_emulator_host=firestore_emulator_host,
                 secret_key=secret_key,
+                cors_origins=cors_origins,
             )
         case "testing":
             config = Config(
@@ -36,6 +44,7 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
                 firestore_project_id=firestore_project_id,
                 firestore_emulator_host=firestore_emulator_host,
                 secret_key=secret_key,
+                cors_origins=cors_origins,
             )
         case _:
             config = Config(
@@ -43,6 +52,7 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
                 firestore_project_id=firestore_project_id,
                 firestore_emulator_host=firestore_emulator_host or "localhost:8080",
                 secret_key=secret_key or "dev-secret-key",
+                cors_origins=cors_origins or "http://localhost:5173",
             )
 
     return {
@@ -51,4 +61,5 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
         "FIRESTORE_PROJECT_ID": config.firestore_project_id,
         "FIRESTORE_EMULATOR_HOST": config.firestore_emulator_host,
         "SECRET_KEY": config.secret_key,
+        "CORS_ORIGINS": config.cors_origins,
     }

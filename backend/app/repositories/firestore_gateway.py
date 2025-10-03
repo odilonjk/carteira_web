@@ -20,11 +20,10 @@ class FirestoreGateway(FirestoreGatewayProtocol):
     def from_settings(
         cls,
         project_id: str | None = None,
-        namespace: str | None = None,
     ) -> "FirestoreGateway":
         """Factory that respects emulator configuration automatically."""
 
-        client = firestore.Client(project=project_id, namespace=namespace)
+        client = firestore.Client(project=project_id)
         return cls(client)
 
     def add_document(
@@ -73,4 +72,3 @@ class FirestoreGateway(FirestoreGatewayProtocol):
             self._client.collection(collection).document(document_id).delete()
         except google_exceptions.GoogleAPICallError as exc:  # pragma: no cover - defensive
             raise PersistenceLayerError("erro ao excluir documento no firestore") from exc
-
