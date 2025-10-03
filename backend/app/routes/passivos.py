@@ -5,7 +5,11 @@ from flask import Blueprint, Flask, current_app, jsonify, request
 from pydantic import ValidationError
 
 from ..models import Passivo
-from ..repositories import PassivosRepository, PersistenceLayerError
+from ..repositories import (
+    PassivosRepository,
+    PersistenceLayerError,
+    DocumentNotFoundError,
+)
 
 blueprint = Blueprint("passivos", __name__, url_prefix="/passivos")
 
@@ -60,6 +64,45 @@ def create_passivo() -> tuple[dict[str, object], int]:
         return jsonify({"error": str(exc)}), 503
 
     return jsonify({"item": created.model_dump(mode="json")}), 201
+
+
+@blueprint.put("/<passivo_id>")
+def update_passivo(passivo_id: str) -> tuple[dict[str, object], int]:
+    """Replace an existing passivo document."""
+
+    payload = request.get_json(silent=True) or {}
+
+    try:
+        passivo = Passivo.model_validate({**payload, "id": passivo_id})
+    except ValidationError as exc:
+        return jsonify({"errors": exc.errors()}), 400
+
+    repository = _get_repository()
+    serialised_payload = passivo.model_dump(mode="json", exclude_none=True, exclude={"id"})
+
+    try:
+        updated = repository.update(passivo_id, serialised_payload)
+    except DocumentNotFoundError:
+        return jsonify({"error": "passivo nao encontrado"}), 404
+    except PersistenceLayerError as exc:
+        return jsonify({"error": str(exc)}), 503
+
+    return jsonify({"item": updated.model_dump(mode="json")}), 200
+
+
+@blueprint.delete("/<passivo_id>")
+def delete_passivo(passivo_id: str) -> tuple[dict[str, object], int]:
+    """Remove a passivo document."""
+
+    repository = _get_repository()
+    try:
+        repository.delete(passivo_id)
+    except DocumentNotFoundError:
+        return jsonify({"error": "passivo nao encontrado"}), 404
+    except PersistenceLayerError as exc:
+        return jsonify({"error": str(exc)}), 503
+
+    return "", 204
 
 
 def register(app: Flask) -> None:

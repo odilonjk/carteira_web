@@ -17,6 +17,17 @@ export const usePortfolioStore = defineStore('portfolio', {
       const response = await apiClient.post('/passivos', payload);
       const created = response.data.item as Passivo;
       this.passivos = [...this.passivos, created];
+      return created;
+    },
+    async updatePassivo(id: string, payload: PassivoInput) {
+      const response = await apiClient.put(`/passivos/${id}`, payload);
+      const updated = response.data.item as Passivo;
+      this.passivos = this.passivos.map((item) => (item.id === id ? updated : item));
+      return updated;
+    },
+    async deletePassivo(id: string) {
+      await apiClient.delete(`/passivos/${id}`);
+      this.passivos = this.passivos.filter((item) => item.id !== id);
     },
     async fetchRendaVariavel() {
       const response = await apiClient.get('/renda-variavel');
