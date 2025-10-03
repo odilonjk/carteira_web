@@ -5,7 +5,7 @@ from flask import Blueprint, Flask, current_app, jsonify, request
 from pydantic import ValidationError
 
 from ..models import Passivo
-from ..repositories import PassivosRepository, PersistenceLayerError, FirestoreGateway
+from ..repositories import PassivosRepository, PersistenceLayerError
 
 blueprint = Blueprint("passivos", __name__, url_prefix="/passivos")
 
@@ -15,9 +15,15 @@ def _get_repository() -> PassivosRepository:
     if callable(factory):
         return factory()  # type: ignore[return-value]
 
-    gateway = FirestoreGateway.from_settings(
-        project_id=current_app.config.get("FIRESTORE_PROJECT_ID"),
-    )
+    gateway_factory = current_app.config.get("DATA_GATEWAY_FACTORY")
+    if callable(gateway_factory):
+        gateway = gateway_factory()
+    else:  # pragma: no cover - defensive fallback for misconfiguration
+        from ..repositories import FirestoreGateway
+
+        gateway = FirestoreGateway.from_settings(
+            project_id=current_app.config.get("FIRESTORE_PROJECT_ID"),
+        )
     return PassivosRepository(gateway)
 
 

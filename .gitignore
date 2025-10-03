@@ -29,3 +29,6 @@ firestore_data/
 .idea/
 .vscode/
 .DS_Store
+
+# DB
+tinydb.json

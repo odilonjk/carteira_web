@@ -22,6 +22,7 @@ from app.repositories import (
     RendaVariavelPositionsRepository,
 )
 from app.repositories.firestore_gateway import FirestoreGateway
+from app.repositories.tinydb_gateway import TinyDbGateway
 from app.repositories.interfaces import FirestoreGatewayProtocol
 
 
@@ -162,3 +163,41 @@ def test_firestore_gateway_add_and_get_successful() -> None:
     mock_document.set.assert_called_once_with({"nome": "Financiamento"}, merge=False)
     assert fetched == {"nome": "Financiamento", "id": "generated-id"}
 
+
+def test_tinydb_gateway_roundtrip(tmp_path) -> None:
+    gateway = TinyDbGateway.from_file(str(tmp_path / "tiny.json"))
+
+    doc_id = gateway.add_document("passivos", {"nome": "Cartao"})
+    assert doc_id
+
+    fetched = gateway.get_document("passivos", doc_id)
+    assert fetched == {"nome": "Cartao", "id": doc_id}
+
+
+def test_tinydb_gateway_merge_updates_fields(tmp_path) -> None:
+    gateway = TinyDbGateway.from_file(str(tmp_path / "tiny.json"))
+    doc_id = gateway.add_document("passivos", {"nome": "Cartao", "saldo": 100.0})
+
+    gateway.add_document("passivos", {"saldo": 50.0}, document_id=doc_id, merge=True)
+
+    fetched = gateway.get_document("passivos", doc_id)
+    assert fetched == {"nome": "Cartao", "saldo": 50.0, "id": doc_id}
+
+
+def test_tinydb_gateway_delete_removes_document(tmp_path) -> None:
+    gateway = TinyDbGateway.from_file(str(tmp_path / "tiny.json"))
+    doc_id = gateway.add_document("passivos", {"nome": "Cartao"})
+
+    gateway.delete_document("passivos", doc_id)
+
+    assert gateway.get_document("passivos", doc_id) is None
+
+
+def test_tinydb_gateway_replace_overwrites_missing_fields(tmp_path) -> None:
+    gateway = TinyDbGateway.from_file(str(tmp_path / "tiny.json"))
+    doc_id = gateway.add_document("passivos", {"nome": "Cartao", "saldo": 100.0})
+
+    gateway.add_document("passivos", {"nome": "Atualizado"}, document_id=doc_id)
+
+    fetched = gateway.get_document("passivos", doc_id)
+    assert fetched == {"nome": "Atualizado", "id": doc_id}

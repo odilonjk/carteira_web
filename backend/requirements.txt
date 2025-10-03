@@ -4,3 +4,4 @@ google-cloud-firestore>=2.13.0
 pydantic>=2.6.0
 pytest>=8.0.0
 python-dotenv>=1.0.1
+tinydb>=4.8.0

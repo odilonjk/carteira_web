@@ -91,3 +91,22 @@ def test_create_passivo_returns_validation_errors(client, stub_repository: StubP
     assert response.status_code == 400
     body = response.get_json()
     assert isinstance(body.get("errors"), list)
+
+
+def test_passivos_endpoints_use_tinydb_gateway_when_not_stubbed(client) -> None:
+    create_response = client.post(
+        "/passivos",
+        json={
+            "nome": "Consorcio",
+            "categoria": "outros",
+            "saldo_atual": 1000.0,
+        },
+    )
+
+    assert create_response.status_code == 201
+
+    list_response = client.get("/passivos")
+    assert list_response.status_code == 200
+    items = list_response.get_json()["items"]
+    assert len(items) == 1
+    assert items[0]["nome"] == "Consorcio"

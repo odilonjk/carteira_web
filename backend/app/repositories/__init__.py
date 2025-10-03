@@ -3,6 +3,7 @@
 from .base import FirestoreRepository
 from .errors import DocumentConflictError, DocumentNotFoundError, PersistenceLayerError, RepositoryError
 from .firestore_gateway import FirestoreGateway
+from .tinydb_gateway import TinyDbGateway
 from .passivos import PassivosRepository
 from .renda_fixa import RendaFixaRepository
 from .renda_variavel import (
@@ -17,6 +18,7 @@ __all__ = [
     "PersistenceLayerError",
     "RepositoryError",
     "FirestoreGateway",
+    "TinyDbGateway",
     "FirestoreRepository",
     "PassivosRepository",
     "RendaFixaRepository",

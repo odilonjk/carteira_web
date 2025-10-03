@@ -14,6 +14,8 @@ class Config:
     firestore_emulator_host: str | None = None
     secret_key: str | None = None
     cors_origins: str | list[str] | None = None
+    data_backend: str = "firestore"
+    tinydb_file: str | None = None
 
 
 def load_config(env: str | None = None) -> Dict[str, Any]:
@@ -24,6 +26,8 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
     firestore_emulator_host = os.environ.get("FIRESTORE_EMULATOR_HOST")
     secret_key = os.environ.get("SECRET_KEY")
     cors_origins_env = os.environ.get("CORS_ORIGINS")
+    data_backend = (os.environ.get("DATA_BACKEND") or "firestore").lower()
+    tinydb_file = os.environ.get("TINYDB_FILE")
 
     cors_origins: str | list[str] | None = None
     if cors_origins_env:
@@ -37,6 +41,8 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
                 firestore_emulator_host=firestore_emulator_host,
                 secret_key=secret_key,
                 cors_origins=cors_origins,
+                data_backend=data_backend,
+                tinydb_file=tinydb_file,
             )
         case "testing":
             config = Config(
@@ -45,6 +51,8 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
                 firestore_emulator_host=firestore_emulator_host,
                 secret_key=secret_key,
                 cors_origins=cors_origins,
+                data_backend=data_backend or "tinydb",
+                tinydb_file=tinydb_file or ":memory:",
             )
         case _:
             config = Config(
@@ -53,6 +61,8 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
                 firestore_emulator_host=firestore_emulator_host or "localhost:8080",
                 secret_key=secret_key or "dev-secret-key",
                 cors_origins=cors_origins or "http://localhost:5173",
+                data_backend=data_backend,
+                tinydb_file=tinydb_file or "var/tinydb.json",
             )
 
     return {
@@ -62,4 +72,6 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
         "FIRESTORE_EMULATOR_HOST": config.firestore_emulator_host,
         "SECRET_KEY": config.secret_key,
         "CORS_ORIGINS": config.cors_origins,
+        "DATA_BACKEND": config.data_backend,
+        "TINYDB_FILE": config.tinydb_file,
     }
