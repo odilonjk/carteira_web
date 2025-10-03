@@ -52,8 +52,10 @@ def create_passivo() -> tuple[dict[str, object], int]:
         return jsonify({"errors": exc.errors()}), 400
 
     repository = _get_repository()
+    serialised_payload = passivo.model_dump(mode="json", exclude_none=True)
+
     try:
-        created = repository.create(passivo.model_dump(exclude_none=True))
+        created = repository.create(serialised_payload)
     except PersistenceLayerError as exc:
         return jsonify({"error": str(exc)}), 503
 
