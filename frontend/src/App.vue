@@ -3,13 +3,16 @@
     <header class="topbar">
       <div class="topbar__frame">
         <nav class="topbar__nav" aria-label="Navegacao principal">
-          <RouterLink class="topbar__link" to="/">Início</RouterLink>
-          <span aria-hidden="true" class="topbar__separator">|</span>
-          <RouterLink class="topbar__link" to="/passivos">Passivos</RouterLink>
-          <span aria-hidden="true" class="topbar__separator">|</span>
-          <RouterLink class="topbar__link" to="/renda-variavel">Renda Variável</RouterLink>
-          <span aria-hidden="true" class="topbar__separator">|</span>
-          <RouterLink class="topbar__link" to="/renda-fixa">Renda Fixa</RouterLink>
+          <template v-for="(item, index) in navigationItems" :key="item.to">
+            <RouterLink class="topbar__link" :to="item.to">{{ item.label }}</RouterLink>
+            <span
+              v-if="index < navigationItems.length - 1"
+              aria-hidden="true"
+              class="topbar__separator"
+            >
+              |
+            </span>
+          </template>
         </nav>
       </div>
     </header>
@@ -20,6 +23,16 @@
 </template>
 
 <script setup lang="ts">
+const navigationItems = [
+  { label: 'Início', to: '/' },
+  { label: 'Passivos', to: '/passivos' },
+  { label: 'Renda Fixa', to: '/renda-fixa' },
+  { label: 'Acoes', to: '/renda-variavel/acoes' },
+  { label: 'FIIs', to: '/renda-variavel/fiis' },
+  { label: 'Stocks', to: '/renda-variavel/stocks' },
+  { label: 'REITs', to: '/renda-variavel/reits' },
+  { label: 'ETF', to: '/renda-variavel/etf' },
+] as const;
 </script>
 
 <style scoped>

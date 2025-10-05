@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import type { RendaVariavelCategory } from '../types/rendaVariavel';
 
 const routes = [
   {
@@ -13,8 +14,13 @@ const routes = [
   },
   {
     path: '/renda-variavel',
-    name: 'renda-variavel',
+    redirect: '/renda-variavel/acoes',
+  },
+  {
+    path: '/renda-variavel/:category(acoes|fiis|stocks|reits|etf)',
+    name: 'renda-variavel-categoria',
     component: () => import('../views/RendaVariavelView.vue'),
+    props: (route) => ({ category: route.params.category as RendaVariavelCategory }),
   },
   {
     path: '/renda-fixa',
