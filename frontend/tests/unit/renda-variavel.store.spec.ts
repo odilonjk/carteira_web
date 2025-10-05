@@ -306,4 +306,149 @@ describe('usePortfolioStore - renda variavel', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/renda-variavel/acoes');
     expect(store.rendaVariavel.acoes).toHaveLength(0);
   });
+
+  it('fetches renda variavel trades for a position', async () => {
+    const store = usePortfolioStore();
+
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 'trade-1',
+            position_id: 'pos-1',
+            tipo_operacao: 'compra',
+            data: '2024-03-01T10:00:00Z',
+            quantidade: 5,
+            cotacao: 20,
+            total: 100,
+            preco_medio_no_ato: 16.5,
+            resultado_monetario: null,
+            performance_percentual: null,
+          },
+        ],
+      },
+    });
+
+    const trades = await store.fetchRendaVariavelTrades('fiis', 'pos-1');
+
+    expect(apiClient.get).toHaveBeenCalledWith('/renda-variavel/fiis/pos-1/transacoes');
+    expect(trades).toHaveLength(1);
+    expect(store.rendaVariavelTrades['pos-1'][0]?.tipo_operacao).toBe('compra');
+  });
+
+  it('creates a renda variavel trade and refreshes data', async () => {
+    const store = usePortfolioStore();
+    store.$patch({
+      rendaVariavel: {
+        acoes: [],
+        fiis: [
+          {
+            id: 'pos-1',
+            ticker: 'HSML11',
+            tipo: 'fii',
+            quantidade: 10,
+            preco_medio: 100,
+            cotacao_atual: 110,
+            total_compra: 1000,
+            total_mercado: 1100,
+            resultado_monetario: 100,
+            performance_percentual: 10,
+            peso_percentual: 100,
+            peso_desejado_percentual: 50,
+            atualizado_em: '2024-02-01T12:00:00Z',
+          },
+        ],
+        stocks: [],
+        reits: [],
+        etf: [],
+      },
+    });
+
+    vi.mocked(apiClient.post).mockResolvedValue({
+      data: {
+        item: {
+          id: 'trade-1',
+          position_id: 'pos-1',
+          tipo_operacao: 'compra',
+          data: '2024-03-01T10:00:00Z',
+          quantidade: 5,
+          cotacao: 120,
+          total: 600,
+          preco_medio_no_ato: 105,
+          resultado_monetario: null,
+          performance_percentual: null,
+        },
+        position: {
+          id: 'pos-1',
+          ticker: 'HSML11',
+          tipo: 'fii',
+          quantidade: 15,
+          preco_medio: 105,
+          cotacao_atual: 120,
+          total_compra: 1575,
+          total_mercado: 1800,
+          resultado_monetario: 225,
+          performance_percentual: 14.2857,
+          peso_percentual: 100,
+          peso_desejado_percentual: 50,
+          atualizado_em: '2024-03-01T10:00:00Z',
+        },
+      },
+    });
+
+    vi.mocked(apiClient.get)
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              id: 'pos-1',
+              ticker: 'HSML11',
+              tipo: 'fii',
+              quantidade: 15,
+              preco_medio: 105,
+              cotacao_atual: 120,
+              total_compra: 1575,
+              total_mercado: 1800,
+              resultado_monetario: 225,
+              performance_percentual: 14.2857,
+              peso_percentual: 100,
+              peso_desejado_percentual: 50,
+              atualizado_em: '2024-03-01T10:00:00Z',
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              id: 'trade-1',
+              position_id: 'pos-1',
+              tipo_operacao: 'compra',
+              data: '2024-03-01T10:00:00Z',
+              quantidade: 5,
+              cotacao: 120,
+              total: 600,
+              preco_medio_no_ato: 105,
+              resultado_monetario: null,
+              performance_percentual: null,
+            },
+          ],
+        },
+      });
+
+    const result = await store.createRendaVariavelTrade('fiis', 'pos-1', {
+      tipo_operacao: 'compra',
+      quantidade: 5,
+      cotacao: 120,
+      data: '2024-03-01T10:00:00Z',
+    });
+
+    expect(apiClient.post).toHaveBeenCalledWith('/renda-variavel/fiis/pos-1/transacoes', expect.any(Object));
+    expect(apiClient.get).toHaveBeenNthCalledWith(1, '/renda-variavel/fiis');
+    expect(apiClient.get).toHaveBeenNthCalledWith(2, '/renda-variavel/fiis/pos-1/transacoes');
+    expect(store.rendaVariavelTrades['pos-1']).toHaveLength(1);
+    expect(result.trade.id).toBe('trade-1');
+    expect(result.position.quantidade).toBe(15);
+  });
 });

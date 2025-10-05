@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from typing import Any, Mapping, MutableMapping
 from uuid import uuid4
 
@@ -42,7 +43,7 @@ class TinyDbGateway(FirestoreGatewayProtocol):
     ) -> str:
         table = self._database.table(collection)
         doc_id = document_id or uuid4().hex
-        record = dict(payload)
+        record = self._prepare_payload(payload)
 
         condition = Query().id == doc_id
         existing = table.get(condition)
@@ -76,3 +77,19 @@ class TinyDbGateway(FirestoreGatewayProtocol):
     def delete_document(self, collection: str, document_id: str) -> None:
         table = self._database.table(collection)
         table.remove(Query().id == document_id)
+
+    def _prepare_payload(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        def convert(value: Any) -> Any:
+            if isinstance(value, Mapping):
+                return {key: convert(val) for key, val in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [convert(item) for item in value]
+            if hasattr(value, "isoformat") and isinstance(value, datetime):
+                return value.isoformat()
+            from enum import Enum
+
+            if isinstance(value, Enum):
+                return value.value
+            return value
+
+        return {key: convert(val) for key, val in payload.items()}

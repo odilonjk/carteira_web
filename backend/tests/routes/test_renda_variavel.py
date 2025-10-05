@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from app.models import RendaVariavelPosition, RendaVariavelTipo
+from app.models import RendaVariavelPosition, RendaVariavelTipo, RendaVariavelTrade
 from app.repositories import DocumentNotFoundError
 
 
@@ -30,7 +30,10 @@ class StubPositionsRepository:
         if position_id not in self._items:
             raise DocumentNotFoundError("position not found")
 
-        data = dict(payload, id=position_id)
+        base = self._items[position_id].model_dump(mode="json")
+        base.update(payload)
+        base["id"] = position_id
+        data = base
         position = RendaVariavelPosition.model_validate(data)
         self._items[position_id] = position
         return position
@@ -54,6 +57,25 @@ class StubPositionsRepository:
             self._items[identifier] = position.model_copy(update={"id": identifier})
 
 
+class StubTradesRepository:
+    """Simple in-memory store for renda variavel trades."""
+
+    def __init__(self) -> None:
+        self._items: list[RendaVariavelTrade] = []
+
+    def list(self) -> list[RendaVariavelTrade]:
+        return list(self._items)
+
+    def list_by_position(self, position_id: str) -> list[RendaVariavelTrade]:
+        return [item for item in self._items if item.position_id == position_id]
+
+    def create(self, payload: dict[str, Any]) -> RendaVariavelTrade:
+        data = dict(payload, id=f"trade-{len(self._items) + 1}")
+        trade = RendaVariavelTrade.model_validate(data)
+        self._items.append(trade)
+        return trade
+
+
 @pytest.fixture()
 def stub_positions_repository(app) -> StubPositionsRepository:
     repository = StubPositionsRepository()
@@ -64,6 +86,18 @@ def stub_positions_repository(app) -> StubPositionsRepository:
     app.config["RENDA_VARIAVEL_POSITIONS_REPOSITORY_FACTORY"] = factory  # type: ignore[assignment]
     yield repository
     app.config.pop("RENDA_VARIAVEL_POSITIONS_REPOSITORY_FACTORY", None)
+
+
+@pytest.fixture()
+def stub_trades_repository(app) -> StubTradesRepository:
+    repository = StubTradesRepository()
+
+    def factory() -> StubTradesRepository:
+        return repository
+
+    app.config["RENDA_VARIAVEL_TRADES_REPOSITORY_FACTORY"] = factory  # type: ignore[assignment]
+    yield repository
+    app.config.pop("RENDA_VARIAVEL_TRADES_REPOSITORY_FACTORY", None)
 
 
 def _position_payload(ticker: str, tipo: RendaVariavelTipo) -> dict[str, Any]:
@@ -258,3 +292,119 @@ def test_delete_renda_variavel_recalculates_weights(
     assert len(remaining) == 1
     assert remaining[0].ticker == "ITSA4"
     assert remaining[0].peso_percentual == pytest.approx(100.0)
+
+
+def test_create_trade_compra_updates_position(
+    client,
+    stub_positions_repository: StubPositionsRepository,
+    stub_trades_repository: StubTradesRepository,
+) -> None:
+    position = stub_positions_repository.create(_position_payload("HGLG11", RendaVariavelTipo.FII))
+
+    response = client.post(
+        f"/renda-variavel/fiis/{position.id}/transacoes",
+        json={
+            "tipo_operacao": "compra",
+            "quantidade": 5,
+            "cotacao": 20.0,
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.get_json()
+    updated = body["position"]
+
+    assert updated["quantidade"] == pytest.approx(15.0)
+    assert updated["preco_medio"] == pytest.approx((150.0 + 5 * 20.0) / 15.0)
+    assert updated["total_compra"] == pytest.approx(250.0)
+    assert updated["total_mercado"] == pytest.approx(15 * 20.0)
+    trades = stub_trades_repository.list_by_position(position.id)
+    assert len(trades) == 1
+    assert trades[0].tipo_operacao == "compra"
+
+
+def test_create_trade_venda_updates_position(
+    client,
+    stub_positions_repository: StubPositionsRepository,
+    stub_trades_repository: StubTradesRepository,
+) -> None:
+    position = stub_positions_repository.create(_position_payload("HGLG11", RendaVariavelTipo.FII))
+
+    response = client.post(
+        f"/renda-variavel/fiis/{position.id}/transacoes",
+        json={
+            "tipo_operacao": "venda",
+            "quantidade": 4,
+            "cotacao": 18.0,
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.get_json()
+    updated = body["position"]
+
+    assert updated["quantidade"] == pytest.approx(6.0)
+    assert updated["total_compra"] == pytest.approx(6 * 15.0)
+    assert updated["total_mercado"] == pytest.approx(6 * 18.0)
+
+    trade = stub_trades_repository.list_by_position(position.id)[0]
+    assert trade.tipo_operacao == "venda"
+    assert trade.resultado_monetario == pytest.approx((18.0 - 15.0) * 4)
+
+
+def test_create_trade_venda_rejects_excess_quantity(
+    client,
+    stub_positions_repository: StubPositionsRepository,
+    stub_trades_repository: StubTradesRepository,
+) -> None:
+    position = stub_positions_repository.create(_position_payload("HGLG11", RendaVariavelTipo.FII))
+
+    response = client.post(
+        f"/renda-variavel/fiis/{position.id}/transacoes",
+        json={
+            "tipo_operacao": "venda",
+            "quantidade": 50,
+            "cotacao": 18.0,
+        },
+    )
+
+    assert response.status_code == 400
+    assert "quantidade" in response.get_json()["error"]
+    assert not stub_trades_repository.list_by_position(position.id)
+
+
+def test_list_trades_returns_sorted_items(
+    client,
+    stub_positions_repository: StubPositionsRepository,
+    stub_trades_repository: StubTradesRepository,
+) -> None:
+    position = stub_positions_repository.create(_position_payload("HGLG11", RendaVariavelTipo.FII))
+
+    # Seed trades manually in repository
+    stub_trades_repository.create(
+        {
+            "position_id": position.id,
+            "tipo_operacao": "compra",
+            "data": datetime(2024, 5, 5, 12, 0, 0),
+            "quantidade": 5,
+            "cotacao": 20.0,
+            "total": 100.0,
+        }
+    )
+    stub_trades_repository.create(
+        {
+            "position_id": position.id,
+            "tipo_operacao": "venda",
+            "data": datetime(2024, 6, 1, 12, 0, 0),
+            "quantidade": 2,
+            "cotacao": 22.0,
+            "total": 44.0,
+        }
+    )
+
+    response = client.get(f"/renda-variavel/fiis/{position.id}/transacoes")
+
+    assert response.status_code == 200
+    items = response.get_json()["items"]
+    assert len(items) == 2
+    assert items[0]["tipo_operacao"] == "venda"  # latest first

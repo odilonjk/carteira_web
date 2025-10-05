@@ -1,5 +1,5 @@
 """Business services orchestrating domain logic."""
 
-from .renda_variavel import RendaVariavelService
+from .renda_variavel import RendaVariavelService, TradeNotAllowedError
 
-__all__ = ["RendaVariavelService"]
+__all__ = ["RendaVariavelService", "TradeNotAllowedError"]

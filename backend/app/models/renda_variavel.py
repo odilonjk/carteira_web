@@ -60,6 +60,15 @@ class RendaVariavelTrade(BaseModel):
     performance_percentual: Optional[float] = None
 
 
+class RendaVariavelTradeInput(BaseModel):
+    """Payload esperado para registrar uma nova transacao."""
+
+    tipo_operacao: str = Field(pattern="^(compra|venda)$")
+    quantidade: float = Field(gt=0)
+    cotacao: float = Field(gt=0)
+    data: Optional[datetime] = None
+
+
 class RendaVariavelProvento(BaseModel):
     """Proventos associados a ativos de renda variavel."""
 
@@ -69,4 +78,3 @@ class RendaVariavelProvento(BaseModel):
     data: datetime
     valor_monetario: float = Field(gt=0)
     moeda: Moeda = Moeda.BRL
-

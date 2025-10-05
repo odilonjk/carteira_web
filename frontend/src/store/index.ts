@@ -5,6 +5,8 @@ import type {
   RendaVariavelCategory,
   RendaVariavelPosition,
   RendaVariavelPositionInput,
+  RendaVariavelTrade,
+  RendaVariavelTradeInput,
 } from '../types/rendaVariavel';
 import type { RendaFixaPosition, RendaFixaPositionInput } from '../types/rendaFixa';
 
@@ -21,6 +23,7 @@ export const usePortfolioStore = defineStore('portfolio', {
     passivos: [] as Passivo[],
     rendaVariavel: createEmptyRendaVariavelState(),
     rendaFixa: [] as RendaFixaPosition[],
+    rendaVariavelTrades: {} as Record<string, RendaVariavelTrade[]>,
   }),
   actions: {
     async fetchPassivos() {
@@ -51,6 +54,7 @@ export const usePortfolioStore = defineStore('portfolio', {
         nextState[categoria] = (grouped[categoria] ?? []) as RendaVariavelPosition[];
       });
       this.rendaVariavel = nextState;
+      this.rendaVariavelTrades = {};
       return nextState;
     },
     async fetchRendaVariavelByCategory(categoria: RendaVariavelCategory) {
@@ -59,6 +63,15 @@ export const usePortfolioStore = defineStore('portfolio', {
       this.rendaVariavel = {
         ...this.rendaVariavel,
         [categoria]: items,
+      };
+      return items;
+    },
+    async fetchRendaVariavelTrades(categoria: RendaVariavelCategory, positionId: string) {
+      const response = await apiClient.get(`/renda-variavel/${categoria}/${positionId}/transacoes`);
+      const items = response.data.items as RendaVariavelTrade[];
+      this.rendaVariavelTrades = {
+        ...this.rendaVariavelTrades,
+        [positionId]: items,
       };
       return items;
     },
@@ -105,6 +118,22 @@ export const usePortfolioStore = defineStore('portfolio', {
     async deleteRendaVariavelPosition(categoria: RendaVariavelCategory, id: string) {
       await apiClient.delete(`/renda-variavel/${categoria}/${id}`);
       await this.fetchRendaVariavelByCategory(categoria);
+      const { [id]: _removed, ...rest } = this.rendaVariavelTrades;
+      this.rendaVariavelTrades = rest;
+    },
+    async createRendaVariavelTrade(
+      categoria: RendaVariavelCategory,
+      positionId: string,
+      payload: RendaVariavelTradeInput,
+    ) {
+      const response = await apiClient.post(
+        `/renda-variavel/${categoria}/${positionId}/transacoes`,
+        payload,
+      );
+      const trade = response.data.item as RendaVariavelTrade;
+      await this.fetchRendaVariavelByCategory(categoria);
+      await this.fetchRendaVariavelTrades(categoria, positionId);
+      return { trade, position: response.data.position as RendaVariavelPosition };
     },
   },
 });

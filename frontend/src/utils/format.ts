@@ -17,6 +17,20 @@ export const formatDate = (valor: string) => {
   }).format(data);
 };
 
+export const formatDateTime = (valor: string) => {
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) {
+    return valor;
+  }
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(data);
+};
+
 export const formatPercent = (valor: number, fractionDigits = 1) =>
   new Intl.NumberFormat('pt-BR', {
     style: 'percent',

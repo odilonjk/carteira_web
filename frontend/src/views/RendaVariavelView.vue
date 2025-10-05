@@ -154,22 +154,129 @@
                   <p v-if="erros[item.id]" class="erro passivo-card__erro">{{ erros[item.id] }}</p>
                 </template>
                 <template v-else>
-                  <div class="passivo-card__detail">
-                    <span class="passivo-card__detail-label">Valor investido</span>
-                    <span class="passivo-card__detail-value">{{ displayValorInvestido(item) }}</span>
+                  <div class="detail-summary-row">
+                    <div
+                      v-for="summary in buildSummaryEntries(item)"
+                      :key="summary.label"
+                      class="detail-summary-item"
+                    >
+                      <span class="detail-summary-item__label">{{ summary.label }}</span>
+                      <span class="detail-summary-item__value">{{ summary.value }}</span>
+                    </div>
                   </div>
-                  <div class="passivo-card__detail">
-                    <span class="passivo-card__detail-label">Resultado</span>
-                    <span class="passivo-card__detail-value">{{ displayResultado(item) }}</span>
-                  </div>
-                  <div class="passivo-card__detail">
-                    <span class="passivo-card__detail-label">Performance</span>
-                    <span class="passivo-card__detail-value">{{ displayPerformance(item) }}</span>
-                  </div>
-                  <div class="passivo-card__detail">
-                    <span class="passivo-card__detail-label">Atualizado em</span>
-                    <span class="passivo-card__detail-value">{{ displayAtualizado(item) }}</span>
-                  </div>
+
+                  <section class="transactions-block">
+                    <header class="transactions-header">
+                      <h3>Transacoes</h3>
+                      <button
+                        v-if="canCreateTransaction(item) && creatingTransactionFor !== item.id"
+                        class="transactions-header__button"
+                        type="button"
+                        @click="abrirFormularioTransacao(item)"
+                      >
+                        Nova transacao
+                      </button>
+                    </header>
+
+                    <p v-if="tradesErrors[item.id ?? '']" class="erro transactions-error">
+                      {{ tradesErrors[item.id ?? ''] }}
+                    </p>
+
+                    <form
+                      v-if="creatingTransactionFor === item.id && item.id"
+                      class="transaction-form"
+                      @submit.prevent="salvarTransacao(item.id!)"
+                    >
+                      <div class="transaction-form__grid">
+                        <label class="field">
+                          <span>Tipo</span>
+                          <select v-model="transactionDrafts[item.id!].tipo_operacao">
+                            <option value="compra">Compra</option>
+                            <option value="venda">Venda</option>
+                          </select>
+                        </label>
+                        <label class="field">
+                          <span>Data</span>
+                          <input v-model="transactionDrafts[item.id!].data" type="datetime-local" />
+                        </label>
+                        <label class="field">
+                          <span>Quantidade</span>
+                          <input
+                            v-model.number="transactionDrafts[item.id!].quantidade"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                          />
+                        </label>
+                        <label class="field">
+                          <span>Cotacao</span>
+                          <input
+                            v-model.number="transactionDrafts[item.id!].cotacao"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                          />
+                        </label>
+                      </div>
+                      <p v-if="transactionErrors[item.id!]" class="erro transactions-error">
+                        {{ transactionErrors[item.id!] }}
+                      </p>
+                      <div class="transaction-form__actions">
+                        <button
+                          class="passivo-card__save"
+                          type="submit"
+                          :disabled="transactionSavingId === item.id"
+                        >
+                          {{ transactionSavingId === item.id ? 'Salvando...' : 'Salvar transacao' }}
+                        </button>
+                        <button
+                          class="passivo-card__cancel"
+                          type="button"
+                          @click="cancelarTransacao(item.id!)"
+                          :disabled="transactionSavingId === item.id"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </form>
+
+                    <div v-else-if="tradesLoading[item.id ?? '']" class="transactions-loading">
+                      Carregando transacoes...
+                    </div>
+
+                    <table
+                      v-else-if="tradesForPosition(item.id).length"
+                      class="transactions-table"
+                    >
+                      <thead>
+                        <tr>
+                          <th scope="col">Data</th>
+                          <th scope="col">Tipo</th>
+                          <th scope="col">Quantidade</th>
+                          <th scope="col">Cotacao</th>
+                          <th scope="col">Total</th>
+                          <th scope="col">Resultado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="trade in tradesForPosition(item.id)" :key="trade.id ?? trade.data">
+                          <td>{{ formatDateTime(trade.data) }}</td>
+                          <td>{{ displayTradeTipo(trade.tipo_operacao) }}</td>
+                          <td>{{ formatNumber(trade.quantidade) }}</td>
+                          <td>{{ formatCurrency(trade.cotacao, displayTradeCurrency()) }}</td>
+                          <td>{{ formatCurrency(trade.total, displayTradeCurrency()) }}</td>
+                          <td>
+                            {{
+                              trade.resultado_monetario !== null
+                                ? formatCurrency(trade.resultado_monetario, displayTradeCurrency())
+                                : '—'
+                            }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p v-else class="transactions-empty">Nenhuma transacao registrada ainda.</p>
+                  </section>
                 </template>
               </div>
             </transition>
@@ -193,12 +300,14 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { ArrowPathIcon, ChartPieIcon, FaceFrownIcon, BanknotesIcon } from '@heroicons/vue/24/outline';
 import { usePortfolioStore } from '../store';
-import { formatCurrency, formatPercent, formatNumber, formatDate } from '../utils/format';
+import { formatCurrency, formatPercent, formatNumber, formatDate, formatDateTime } from '../utils/format';
 import type {
   RendaVariavelCategory,
   RendaVariavelPosition,
   RendaVariavelPositionInput,
   RendaVariavelTipoValue,
+  RendaVariavelTrade,
+  RendaVariavelTradeInput,
 } from '../types/rendaVariavel';
 
 const CATEGORY_META: Record<
@@ -251,10 +360,22 @@ type RendaVariavelDraft = {
 const props = defineProps<{ category: RendaVariavelCategory }>();
 
 const portfolioStore = usePortfolioStore();
-const { rendaVariavel } = storeToRefs(portfolioStore);
+const { rendaVariavel, rendaVariavelTrades } = storeToRefs(portfolioStore);
 
 const drafts = reactive<Record<string, RendaVariavelDraft>>({});
 const erros = reactive<Record<string, string>>({});
+const tradesLoading = reactive<Record<string, boolean>>({});
+const tradesErrors = reactive<Record<string, string>>({});
+type TransactionDraft = {
+  tipo_operacao: RendaVariavelTradeInput['tipo_operacao'];
+  data: string;
+  quantidade: number;
+  cotacao: number;
+};
+const transactionDrafts = reactive<Record<string, TransactionDraft>>({});
+const transactionErrors = reactive<Record<string, string>>({});
+const creatingTransactionFor = ref<string | null>(null);
+const transactionSavingId = ref<string | null>(null);
 const expandedCards = ref<Set<string>>(new Set());
 const editingId = ref<string | null>(null);
 const savingId = ref<string | null>(null);
@@ -325,6 +446,9 @@ const ensureExpanded = (id: string | null | undefined) => {
   const next = new Set(expandedCards.value);
   next.add(id);
   expandedCards.value = next;
+  if (!isNew(id)) {
+    void loadTradesForPosition(id);
+  }
 };
 
 const collapse = (id: string | null | undefined) => {
@@ -415,6 +539,128 @@ const displayPerformance = (item: RendaVariavelPosition) => formatPercent(item.p
 
 const displayAtualizado = (item: RendaVariavelPosition) => formatDate(item.atualizado_em);
 
+const tradesForPosition = (id: string | null | undefined): RendaVariavelTrade[] => {
+  if (!id) {
+    return [];
+  }
+  return rendaVariavelTrades.value[id] ?? [];
+};
+
+const loadTradesForPosition = async (id: string | null | undefined) => {
+  if (!id) {
+    return;
+  }
+
+  if (tradesLoading[id] || rendaVariavelTrades.value[id]) {
+    return;
+  }
+
+  tradesLoading[id] = true;
+  tradesErrors[id] = '';
+  try {
+    await portfolioStore.fetchRendaVariavelTrades(props.category, id);
+  } catch (error) {
+    tradesErrors[id] = 'Nao foi possivel carregar as transacoes.';
+  } finally {
+    tradesLoading[id] = false;
+  }
+};
+
+const buildSummaryEntries = (item: RendaVariavelPosition) => [
+  { label: 'Valor investido', value: displayValorInvestido(item) },
+  { label: 'Resultado', value: displayResultado(item) },
+  { label: 'Performance', value: displayPerformance(item) },
+  { label: 'Atualizado em', value: displayAtualizado(item) },
+];
+
+const canCreateTransaction = (item: RendaVariavelPosition) =>
+  !!item.id && !isNew(item.id) && !isEditing(item.id);
+
+const defaultTransactionDraft = (item: RendaVariavelPosition): TransactionDraft => ({
+  tipo_operacao: 'compra',
+  data: new Date().toISOString().slice(0, 16),
+  quantidade: 0,
+  cotacao: Number(item.cotacao_atual ?? 0),
+});
+
+const abrirFormularioTransacao = (item: RendaVariavelPosition) => {
+  if (!item.id) {
+    return;
+  }
+  void loadTradesForPosition(item.id);
+  if (!transactionDrafts[item.id]) {
+    transactionDrafts[item.id] = defaultTransactionDraft(item);
+  }
+  transactionErrors[item.id] = '';
+  creatingTransactionFor.value = item.id;
+};
+
+const cancelarTransacao = (id: string) => {
+  delete transactionDrafts[id];
+  delete transactionErrors[id];
+  creatingTransactionFor.value = null;
+  transactionSavingId.value = null;
+};
+
+const validarTransacaoDraft = (
+  position: RendaVariavelPosition,
+  draft: TransactionDraft,
+) => {
+  if (draft.quantidade <= 0) {
+    return 'Informe uma quantidade maior que zero.';
+  }
+  if (draft.cotacao <= 0) {
+    return 'Informe a cotacao da transacao.';
+  }
+  if (draft.tipo_operacao === 'venda' && draft.quantidade > (position.quantidade ?? 0)) {
+    return 'Quantidade vendida maior que a quantidade em carteira.';
+  }
+  return null;
+};
+
+const salvarTransacao = async (id: string) => {
+  const draft = transactionDrafts[id];
+  const position = currentItems.value.find((item) => item.id === id);
+
+  if (!draft || !position) {
+    return;
+  }
+
+  const erro = validarTransacaoDraft(position, draft);
+  if (erro) {
+    transactionErrors[id] = erro;
+    return;
+  }
+
+  transactionErrors[id] = '';
+  transactionSavingId.value = id;
+
+  const payload: RendaVariavelTradeInput = {
+    tipo_operacao: draft.tipo_operacao,
+    quantidade: Number(draft.quantidade),
+    cotacao: Number(draft.cotacao),
+    data: draft.data ? new Date(draft.data).toISOString() : undefined,
+  };
+
+  try {
+    await portfolioStore.createRendaVariavelTrade(props.category, id, payload);
+    cancelarTransacao(id);
+    ensureExpanded(id);
+  } catch (error) {
+    const message =
+      (error as { response?: { data?: { error?: string } } }).response?.data?.error ??
+      'Nao foi possivel registrar a transacao.';
+    transactionErrors[id] = message;
+  } finally {
+    transactionSavingId.value = null;
+  }
+};
+
+const displayTradeTipo = (tipo: RendaVariavelTrade['tipo_operacao']) =>
+  tipo === 'compra' ? 'Compra' : 'Venda';
+
+const displayTradeCurrency = () => (currency.value === 'USD' ? 'USD' : 'BRL');
+
 const carregar = async () => {
   isCarregando.value = true;
   try {
@@ -485,8 +731,8 @@ const validarDraft = (draft: RendaVariavelDraft) => {
   if (!draft.ticker.trim()) {
     return 'Informe o ticker do ativo.';
   }
-  if (draft.quantidade <= 0) {
-    return 'Quantidade deve ser maior que zero.';
+  if (draft.quantidade < 0) {
+    return 'Quantidade nao pode ser negativa.';
   }
   if (draft.preco_medio < 0 || draft.cotacao_atual < 0) {
     return 'Valores monetarios nao podem ser negativos.';
@@ -625,6 +871,13 @@ watch(
     newCardId.value = null;
     Object.keys(drafts).forEach((key) => delete drafts[key]);
     Object.keys(erros).forEach((key) => delete erros[key]);
+    creatingTransactionFor.value = null;
+    transactionSavingId.value = null;
+    Object.keys(transactionDrafts).forEach((key) => delete transactionDrafts[key]);
+    Object.keys(transactionErrors).forEach((key) => delete transactionErrors[key]);
+    Object.keys(tradesErrors).forEach((key) => delete tradesErrors[key]);
+    Object.keys(tradesLoading).forEach((key) => delete tradesLoading[key]);
+    portfolioStore.rendaVariavelTrades = {};
     expandedCards.value = new Set();
     await carregar();
   },

@@ -37,3 +37,23 @@ export interface RendaVariavelPositionInput {
   peso_desejado_percentual: number;
   atualizado_em: string;
 }
+
+export interface RendaVariavelTrade {
+  id: string | null;
+  position_id: string;
+  tipo_operacao: 'compra' | 'venda';
+  data: string;
+  quantidade: number;
+  cotacao: number;
+  total: number;
+  preco_medio_no_ato: number | null;
+  resultado_monetario: number | null;
+  performance_percentual: number | null;
+}
+
+export interface RendaVariavelTradeInput {
+  tipo_operacao: 'compra' | 'venda';
+  quantidade: number;
+  cotacao: number;
+  data?: string;
+}

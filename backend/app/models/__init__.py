@@ -5,6 +5,7 @@ from .renda_variavel import (
     Moeda,
     RendaVariavelPosition,
     RendaVariavelProvento,
+    RendaVariavelTradeInput,
     RendaVariavelTipo,
     RendaVariavelTrade,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "RendaFixaTipo",
     "RendaVariavelPosition",
     "RendaVariavelProvento",
+    "RendaVariavelTradeInput",
     "RendaVariavelTipo",
     "RendaVariavelTrade",
 ]
